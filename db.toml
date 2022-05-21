@@ -1,0 +1,4 @@
+USERNAME = "root"
+PASSWORD = "00000"
+HOST = "localhost"
+PORT = 3306
