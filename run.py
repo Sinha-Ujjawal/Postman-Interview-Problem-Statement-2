@@ -1,3 +1,4 @@
+from prefect import Flow
 import toml
 from prefect.executors import LocalDaskExecutor
 from db_helpers import DBCreds
@@ -14,10 +15,14 @@ def db_creds_from_toml(toml_file: str) -> DBCreds:
     )
 
 
-def main():
+def create_flow_for_main() -> Flow:
     db_creds = db_creds_from_toml("./db.toml")
     flow_params = FlowParameters(db_creds=db_creds, data_insert_chunksize=23)
-    flow = create_flow(flow_params=flow_params, flow_name="Flow: Category Apis")
+    return create_flow(flow_params=flow_params, flow_name="Flow: Category Apis")
+
+
+def main():
+    flow = create_flow_for_main()
     _ = flow.run(executor=LocalDaskExecutor())
 
 

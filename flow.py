@@ -8,7 +8,7 @@ import prefect
 from prefect import Flow, task
 from db_helpers import DBCreds
 from api import get_catgory_apis, CategoryApi
-from db import refresh_stg_category_apis
+from db import refresh_stg_category_apis, update_dwh_categories, update_dwh_apis
 
 # configuring sqlalchemy logger
 sqlalchemy_logger = logging.getLogger("sqlalchemy.engine")
@@ -60,12 +60,32 @@ def refresh_stg_category_apis_taskfn(chunksize: int, db_creds: DBCreds):
     )
 
 
+@task(max_retries=3, retry_delay=timedelta(minutes=3))
+def update_dwh_categories_taskfn(db_creds: DBCreds):
+    update_dwh_categories(db_creds)
+
+
+@task(max_retries=3, retry_delay=timedelta(minutes=3))
+def update_dwh_apis_taskfn(db_creds: DBCreds):
+    update_dwh_apis(db_creds)
+
+
 ##
 
 
 def create_flow(flow_params: FlowParameters, flow_name: str) -> Flow:
     with Flow(name=flow_name) as flow:
-        refresh_stg_category_apis_taskfn(
+        refresh_stg_category_apis_task = refresh_stg_category_apis_taskfn(
             chunksize=flow_params.data_insert_chunksize, db_creds=flow_params.db_creds
         )
+
+        update_dwh_categories_task = update_dwh_categories_taskfn(
+            db_creds=flow_params.db_creds
+        )
+        refresh_stg_category_apis_task.set_downstream(update_dwh_categories_task)
+
+        update_dwh_apis_task = update_dwh_apis_taskfn(db_creds=flow_params.db_creds)
+        refresh_stg_category_apis_task.set_downstream(update_dwh_apis_task)
+        update_dwh_categories_task.set_downstream(update_dwh_apis_task)
+
     return flow

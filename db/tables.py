@@ -15,6 +15,7 @@ dwh_categories = sa.Table(
     sa.Column("id", sa.Integer, primary_key=True),
     sa.Column("category", sa.VARCHAR(128), nullable=False),
     sa.Column("created_at", sa.TIMESTAMP, default=sa.func.current_timestamp()),
+    sa.UniqueConstraint("category", name="uk_category"),
 )
 
 dwh_apis = sa.Table(
@@ -24,4 +25,5 @@ dwh_apis = sa.Table(
     sa.Column("category_id", sa.ForeignKey("categories.id")),
     sa.Column("api", sa.VARCHAR(128), nullable=False),
     sa.Column("created_at", sa.TIMESTAMP, default=sa.func.current_timestamp()),
+    sa.UniqueConstraint("category_id", "api", name="uk_category_id__api"),
 )
