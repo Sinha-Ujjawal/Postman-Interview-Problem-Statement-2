@@ -11,7 +11,7 @@ BASE_URL = "https://public-apis-api.herokuapp.com/api/v1"
 logger = logging.getLogger("api")
 logger.setLevel(logging.DEBUG)
 # create file handler that logs debug and higher level messages
-fh = logging.FileHandler("api.log")
+fh = logging.FileHandler("api.log", mode="w")
 fh.setLevel(logging.DEBUG)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
@@ -38,7 +38,10 @@ class Api:
 
 
 def make_headers(api: Api) -> Dict[str, str]:
-    return {"Authorization": f"Bearer {api.token}"}
+    ret = {}
+    if api.token:
+        ret.update({"Authorization": f"Bearer {api.token}"})
+    return ret
 
 
 TOKEN_SCHEMA = {"properties": {"token": {"type": "string"}}}
@@ -47,9 +50,13 @@ TOKEN_SCHEMA = {"properties": {"token": {"type": "string"}}}
 def with_auth_token_set(api: Api) -> Api:
     logger.debug("Reauthentication")
     url = f"{BASE_URL}/auth/token"
-    resp_json = requests.get(url).json()
-    validate(resp_json, TOKEN_SCHEMA)
-    return replace(api, token=resp_json["token"])
+    while True: # TODO: Could be very dangerous!
+        payload = get(url, api)
+        if payload:
+            resp, api = payload
+            resp_json = resp.json()
+            validate(resp_json, TOKEN_SCHEMA)
+            return replace(api, token=resp_json["token"])
 
 
 def get(url: str, api: Api) -> Optional[Tuple[requests.Response, Api]]:
@@ -61,6 +68,7 @@ def get(url: str, api: Api) -> Optional[Tuple[requests.Response, Api]]:
         response = requests.get(url, headers=headers)
 
         if response.status_code == 429:  # max request made
+            logger.debug(f"Max Request Made! Total attempts: {attempts} made out of {api.max_attempts}")
             tts = t + random()
             time.sleep(tts)
             attempts += 1
@@ -85,6 +93,7 @@ def get_paged_response(
         if not data:
             break
         yield data, api
+        logger.debug(f"Page: {page} of url: {base_url} read")
         page += 1
 
 
