@@ -50,7 +50,7 @@ TOKEN_SCHEMA = {"properties": {"token": {"type": "string"}}}
 def with_auth_token_set(api: Api) -> Api:
     logger.debug("Reauthentication")
     url = f"{BASE_URL}/auth/token"
-    while True: # TODO: Could be very dangerous!
+    while True:  # TODO: Could be very dangerous!
         payload = get(url, api)
         if payload:
             resp, api = payload
@@ -68,7 +68,9 @@ def get(url: str, api: Api) -> Optional[Tuple[requests.Response, Api]]:
         response = requests.get(url, headers=headers)
 
         if response.status_code == 429:  # max request made
-            logger.debug(f"Max Request Made! Total attempts: {attempts} made out of {api.max_attempts}")
+            logger.debug(
+                f"Max Request Made! Total attempts: {attempts} made out of {api.max_attempts}"
+            )
             tts = t + random()
             time.sleep(tts)
             attempts += 1
