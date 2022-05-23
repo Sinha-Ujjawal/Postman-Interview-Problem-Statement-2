@@ -1,6 +1,6 @@
 from random import random
-from typing import Dict, Iterable, List, Optional, Tuple
-from dataclasses import dataclass, field, replace
+from typing import Dict, Iterable, List, Optional
+from dataclasses import dataclass, field
 import requests
 import time
 from jsonschema import validate
@@ -31,7 +31,7 @@ def get_prepared_url(base_url: str, **params):
     return req.url
 
 
-@dataclass(frozen=True)
+@dataclass
 class Api:
     token: Optional[str] = field(default=None, repr=True)
     max_attempts: int = field(default=10)
@@ -47,19 +47,20 @@ def make_headers(api: Api) -> Dict[str, str]:
 TOKEN_SCHEMA = {"properties": {"token": {"type": "string"}}}
 
 
-def with_auth_token_set(api: Api) -> Api:
+def set_auth_token(api: Api) -> None:
     logger.debug("Reauthentication")
     url = f"{BASE_URL}/auth/token"
+    api.token = None
     while True:  # TODO: Could be very dangerous!
-        payload = get(url, api)
-        if payload:
-            resp, api = payload
+        resp = get(url, api)
+        if resp:
             resp_json = resp.json()
             validate(resp_json, TOKEN_SCHEMA)
-            return replace(api, token=resp_json["token"])
+            api.token = resp_json["token"]
+            break
 
 
-def get(url: str, api: Api) -> Optional[Tuple[requests.Response, Api]]:
+def get(url: str, api: Api) -> Optional[requests.Response]:
     logger.debug(f"Get Request: {url}")
     attempts = 0
     t = 1
@@ -76,25 +77,20 @@ def get(url: str, api: Api) -> Optional[Tuple[requests.Response, Api]]:
             attempts += 1
             t <<= 1
         elif response.status_code != 200:
-            api = with_auth_token_set(api)
+            set_auth_token(api)
         else:
-            return (response, api)
+            return response
     return None
 
 
-def get_paged_response(
-    base_url: str, api: Api
-) -> Iterable[Tuple[requests.Response, Api]]:
+def get_paged_response(base_url: str, api: Api) -> Iterable[requests.Response]:
     page = 1
     while True:  # could be very dangerous
         url = get_prepared_url(base_url, page=page)
         payload = get(url, api)
         if not payload:
             break
-        data, api = payload
-        if not data:
-            break
-        yield data, api
+        yield payload
         logger.debug(f"Page: {page} of url: {base_url} read")
         page += 1
 
@@ -109,14 +105,14 @@ CATEGORIES_SCHEMA = {
 }
 
 
-def get_categories(api: Api) -> Iterable[Tuple[Categories, Api]]:
-    for res, api in get_paged_response(f"{BASE_URL}/apis/categories", api):
+def get_categories(api: Api) -> Iterable[Categories]:
+    for res in get_paged_response(f"{BASE_URL}/apis/categories", api):
         res_as_json = res.json()
         validate(res_as_json, CATEGORIES_SCHEMA)
         categories = res_as_json["categories"]
         if not categories:
             break
-        yield categories, api
+        yield categories
 
 
 @dataclass(frozen=True)
@@ -141,7 +137,7 @@ CATEGORY_APIS_SCHEMA = {
 
 
 def get_category_apis_from_category(category: str, api: Api) -> Iterable[CategoryApi]:
-    for res, api in get_paged_response(
+    for res in get_paged_response(
         get_prepared_url(f"{BASE_URL}/apis/entry", category=category), api
     ):
         res_as_json = res.json()
@@ -153,8 +149,8 @@ def get_category_apis_from_category(category: str, api: Api) -> Iterable[Categor
             yield CategoryApi(category=category, api=link)
 
 
-def get_catgory_apis() -> Iterable[CategoryApi]:
-    api: Api = Api()
-    for categories, api in get_categories(api):
+def get_catgory_apis(max_attempts: int = 10) -> Iterable[CategoryApi]:
+    api: Api = Api(max_attempts=max_attempts)
+    for categories in get_categories(api):
         for category in categories:
             yield from get_category_apis_from_category(category, api)
